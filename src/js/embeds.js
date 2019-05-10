@@ -175,18 +175,28 @@
      */
 
     Embeds.prototype.add = function () {
-        var $place = this.$el.find('.medium-insert-active');
-
-        // Fix #132
-        // Make sure that the content of the paragraph is empty and <br> is wrapped in <p></p> to avoid Firefox problems
-        $place.html(this.templates['src/js/templates/core-empty-line.hbs']().trim());
+        var $div, $place = this.$el.find('.medium-insert-active');
 
         // Replace paragraph with div to prevent #124 issue with pasting in Chrome,
         // because medium editor wraps inserted content into paragraph and paragraphs can't be nested
         if ($place.is('p')) {
-            $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
-            $place = this.$el.find('.medium-insert-active');
-            this.core.moveCaret($place);
+            if ($place.text().trim()) {
+                $div = $('<div>', {
+                    text: '',
+                    class: 'medium-insert-active',
+                    append: $('<p><br></p>')
+                });
+                $place.after($div);
+                $place = $div;
+                this.core.moveCaret($place);
+            } else {
+                // Fix #132
+                // Make sure that the content of the paragraph is empty and <br> is wrapped in <p></p> to avoid Firefox problems
+                $place.html(this.templates['src/js/templates/core-empty-line.hbs']().trim());
+                $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
+                $place = this.$el.find('.medium-insert-active');
+                this.core.moveCaret($place);
+            }
         }
 
         $place.addClass('medium-insert-embeds medium-insert-embeds-input medium-insert-embeds-active');
