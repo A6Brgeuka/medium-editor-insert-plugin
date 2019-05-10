@@ -231,6 +231,7 @@
             $progressBarTemplate,
             progress,
             onProgress,
+            $div,
             that = this,
             uploadErrors = [],
             file = data.files[0],
@@ -258,14 +259,33 @@
 
         // Replace paragraph with div, because figure elements can't be inside paragraph
         if ($place.is('p')) {
-            $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
-            $place = this.$el.find('.medium-insert-active');
-            if ($place.next().is('p')) {
-                this.core.moveCaret($place.next());
+            if ($place.text().trim()) {
+                $place.removeClass('medium-insert-active');
+                $div = $('<div>', {
+                    text: '',
+                    class: 'medium-insert-active'
+                });
+
+                $place.after($div);
+
+                $place = $div;
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
             } else {
-                $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
-                this.core.moveCaret($place.next());
+                $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
+                $place = this.$el.find('.medium-insert-active');
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
             }
+
         }
 
         $place.addClass('medium-insert-images');
