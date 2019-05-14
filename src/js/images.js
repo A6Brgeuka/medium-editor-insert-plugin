@@ -200,7 +200,7 @@
             fileUploadOptions = {
                 dataType: 'json',
                 add: function (e, data) {
-                    $.proxy(that, 'uploadAdd', e, data)();
+                    $.proxy(that, 'uploadImage', e, data)();
                 },
                 done: function (e, data) {
                     $.proxy(that, 'uploadDone', e, data)();
@@ -224,6 +224,94 @@
         $file.fileupload($.extend(true, {}, this.options.fileUploadOptions, fileUploadOptions));
 
         $file.click();
+    };
+
+    Images.prototype.uploadImage = function (e, data) {
+        var $place = this.$el.find('.medium-insert-active'),
+            $progressBarTemplate,
+            progress,
+            onProgress,
+            $div,
+            that = this,
+            uploadErrors = [],
+            file = data.files[0],
+            acceptFileTypes = this.options.fileUploadOptions.acceptFileTypes,
+            maxFileSize = this.options.fileUploadOptions.maxFileSize;
+
+        if (acceptFileTypes && !acceptFileTypes.test(file.type)) {
+            uploadErrors.push(this.options.messages.acceptFileTypesError + file.name);
+        } else if (maxFileSize && file.size > maxFileSize) {
+            uploadErrors.push(this.options.messages.maxFileSizeError + file.name);
+        }
+        if (uploadErrors.length > 0) {
+            if (this.options.uploadFailed && typeof this.options.uploadFailed === "function") {
+                this.options.uploadFailed(uploadErrors, data);
+
+                return;
+            }
+
+            alert(uploadErrors.join("\n"));
+
+            return;
+        }
+
+        this.core.hideButtons();
+
+        // Replace paragraph with div, because figure elements can't be inside paragraph
+        if ($place.is('p')) {
+            if ($place.text().trim()) {
+                $place.removeClass('medium-insert-active');
+                $div = $('<div>', {
+                    text: '',
+                    class: 'medium-insert-active'
+                });
+
+                $place.after($div);
+
+                $place = $div;
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
+            } else {
+                $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
+                $place = this.$el.find('.medium-insert-active');
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
+            }
+
+        }
+
+        $place.addClass('medium-insert-images');
+
+        if (this.options.preview === false && $place.find('progress').length === 0 && (new XMLHttpRequest().upload)) {
+            $progressBarTemplate = $(this.templates['src/js/templates/images-progressbar.hbs']());
+            $progressBarTemplate.appendTo($place);
+        }
+
+        onProgress = function (evt) {
+
+            if (that.options.preview === false) {
+                progress = evt.totalPercent;
+
+                $progressBarTemplate.attr('value', progress);
+
+                if (progress === 100) {
+                    $progressBarTemplate.remove();
+                }
+            }
+        };
+
+        that.options.upload(file, { onProgress: onProgress })
+            .then(function (res) {
+                $.proxy(that, 'showImage', res.url, data)();
+            });
     };
 
     /**

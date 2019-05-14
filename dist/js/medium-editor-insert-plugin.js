@@ -581,7 +581,7 @@ this["MediumInsert"]["Templates"]["src/js/templates/images-toolbar.hbs"] = Handl
                 }
             });
 
-            if ($p.length && (($p.text().trim() === '' && !activeAddon) || activeAddon === 'images')) {
+            if ($p.length && (!activeAddon || activeAddon === 'images')) {
                 $p.addClass('medium-insert-active');
 
                 if (activeAddon === 'images') {
@@ -1002,18 +1002,28 @@ this["MediumInsert"]["Templates"]["src/js/templates/images-toolbar.hbs"] = Handl
      */
 
     Embeds.prototype.add = function () {
-        var $place = this.$el.find('.medium-insert-active');
-
-        // Fix #132
-        // Make sure that the content of the paragraph is empty and <br> is wrapped in <p></p> to avoid Firefox problems
-        $place.html(this.templates['src/js/templates/core-empty-line.hbs']().trim());
+        var $div, $place = this.$el.find('.medium-insert-active');
 
         // Replace paragraph with div to prevent #124 issue with pasting in Chrome,
         // because medium editor wraps inserted content into paragraph and paragraphs can't be nested
         if ($place.is('p')) {
-            $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
-            $place = this.$el.find('.medium-insert-active');
-            this.core.moveCaret($place);
+            if ($place.text().trim()) {
+                $div = $('<div>', {
+                    text: '',
+                    class: 'medium-insert-active',
+                    append: $('<p><br></p>')
+                });
+                $place.after($div);
+                $place = $div;
+                this.core.moveCaret($place);
+            } else {
+                // Fix #132
+                // Make sure that the content of the paragraph is empty and <br> is wrapped in <p></p> to avoid Firefox problems
+                $place.html(this.templates['src/js/templates/core-empty-line.hbs']().trim());
+                $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
+                $place = this.$el.find('.medium-insert-active');
+                this.core.moveCaret($place);
+            }
         }
 
         $place.addClass('medium-insert-embeds medium-insert-embeds-input medium-insert-embeds-active');
@@ -1466,7 +1476,7 @@ this["MediumInsert"]["Templates"]["src/js/templates/images-toolbar.hbs"] = Handl
     Embeds.prototype.repositionToolbars = function () {
         var $toolbar = $('.medium-insert-embeds-toolbar'),
             $toolbar2 = $('.medium-insert-embeds-toolbar2'),
-            $embed = this.$el.find('.medium-insert-embeds-selected'),
+            $embed = this.$el.find('.medium-insert-embeds-selected .medium-insert-embed'),
             elementsContainer = this.core.getEditor().options.elementsContainer,
             elementsContainerAbsolute = ['absolute', 'fixed'].indexOf(window.getComputedStyle(elementsContainer).getPropertyValue('position')) > -1,
             elementsContainerBoundary = elementsContainerAbsolute ? elementsContainer.getBoundingClientRect() : null,
@@ -1778,7 +1788,7 @@ this["MediumInsert"]["Templates"]["src/js/templates/images-toolbar.hbs"] = Handl
             fileUploadOptions = {
                 dataType: 'json',
                 add: function (e, data) {
-                    $.proxy(that, 'uploadAdd', e, data)();
+                    $.proxy(that, 'uploadImage', e, data)();
                 },
                 done: function (e, data) {
                     $.proxy(that, 'uploadDone', e, data)();
@@ -1802,6 +1812,94 @@ this["MediumInsert"]["Templates"]["src/js/templates/images-toolbar.hbs"] = Handl
         $file.fileupload($.extend(true, {}, this.options.fileUploadOptions, fileUploadOptions));
 
         $file.click();
+    };
+
+    Images.prototype.uploadImage = function (e, data) {
+        var $place = this.$el.find('.medium-insert-active'),
+            $progressBarTemplate,
+            progress,
+            onProgress,
+            $div,
+            that = this,
+            uploadErrors = [],
+            file = data.files[0],
+            acceptFileTypes = this.options.fileUploadOptions.acceptFileTypes,
+            maxFileSize = this.options.fileUploadOptions.maxFileSize;
+
+        if (acceptFileTypes && !acceptFileTypes.test(file.type)) {
+            uploadErrors.push(this.options.messages.acceptFileTypesError + file.name);
+        } else if (maxFileSize && file.size > maxFileSize) {
+            uploadErrors.push(this.options.messages.maxFileSizeError + file.name);
+        }
+        if (uploadErrors.length > 0) {
+            if (this.options.uploadFailed && typeof this.options.uploadFailed === "function") {
+                this.options.uploadFailed(uploadErrors, data);
+
+                return;
+            }
+
+            alert(uploadErrors.join("\n"));
+
+            return;
+        }
+
+        this.core.hideButtons();
+
+        // Replace paragraph with div, because figure elements can't be inside paragraph
+        if ($place.is('p')) {
+            if ($place.text().trim()) {
+                $place.removeClass('medium-insert-active');
+                $div = $('<div>', {
+                    text: '',
+                    class: 'medium-insert-active'
+                });
+
+                $place.after($div);
+
+                $place = $div;
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
+            } else {
+                $place.replaceWith('<div class="medium-insert-active">' + $place.html() + '</div>');
+                $place = this.$el.find('.medium-insert-active');
+                if ($place.next().is('p')) {
+                    this.core.moveCaret($place.next());
+                } else {
+                    $place.after('<p><br></p>'); // add empty paragraph so we can move the caret to the next line.
+                    this.core.moveCaret($place.next());
+                }
+            }
+
+        }
+
+        $place.addClass('medium-insert-images');
+
+        if (this.options.preview === false && $place.find('progress').length === 0 && (new XMLHttpRequest().upload)) {
+            $progressBarTemplate = $(this.templates['src/js/templates/images-progressbar.hbs']());
+            $progressBarTemplate.appendTo($place);
+        }
+
+        onProgress = function (evt) {
+
+            if (that.options.preview === false) {
+                progress = evt.totalPercent;
+
+                $progressBarTemplate.attr('value', progress);
+
+                if (progress === 100) {
+                    $progressBarTemplate.remove();
+                }
+            }
+        };
+
+        that.options.upload(file, { onProgress: onProgress })
+            .then(function (res) {
+                $.proxy(that, 'showImage', res.url, data)();
+            });
     };
 
     /**
